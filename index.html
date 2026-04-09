@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Idol Debut Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap');
+        body { font-family: 'Noto Sans KR', sans-serif; -webkit-tap-highlight-color: transparent; background-color: #f1f5f9; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .trainee-photo { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        const Icon = ({ name, size = 20, className = "" }) => {
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
+            return <i data-lucide={name} className={className} style={{ width: size, height: size }}></i>;
+        };
+
+        const App = () => {
+            const [step, setStep] = useState('home');
+            const [name, setName] = useState('');
+            const [image, setImage] = useState(null);
+            const [currentIdx, setCurrentIdx] = useState(0);
+            const [stats, setStats] = useState({ dance: 0, vocal: 0, rap: 0, visual: 0, variety: 0 });
+            const [result, setResult] = useState(null);
+            const fileInputRef = useRef(null);
+            const resultRef = useRef(null);
+
+            const handleImageResize = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.src = ev.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_SIZE = 600; 
+                        let w = img.width, h = img.height;
+                        if (w > h) { if (w > MAX_SIZE) { h *= MAX_SIZE/w; w = MAX_SIZE; } }
+                        else { if (h > MAX_SIZE) { w *= MAX_SIZE/h; h = MAX_SIZE; } }
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        setImage(canvas.toDataURL('image/jpeg', 0.8));
+                    };
+                };
+            };
+
+            const questions = [
+                { q: "소속사 등급 평가에서 당신의 필살기는?", options: [{ text: "눈을 뗄 수 없는 파워풀한 댄스", s: { dance: 15 } }, { text: "감정을 울리는 독보적인 음색", s: { vocal: 15 } }] },
+                { q: "합숙소 첫날, 당신은 어떤 연습생?", options: [{ text: "먼저 다가가 인사를 건네는 분위기 메이커", s: { variety: 10, visual: 5 } }, { text: "조용히 실력을 갈고닦는 노력파", s: { visual: 10, variety: 5 } }] },
+                { q: "기획사 평가 등급이 낮게 나왔다면?", options: [{ text: "독기를 품고 밤샘 연습에 돌입한다", s: { dance: 10, vocal: 10 } }, { text: "부족한 점을 묻고 피드백을 수용한다", s: { variety: 12 } }] },
+                { q: "팀 배틀 곡 선정권! 당신이 고를 곡은?", options: [{ text: "상큼하고 발랄한 정통 아이돌 스타일", s: { variety: 10, visual: 10 } }, { text: "강렬하고 힙한 걸크러쉬/다크 스타일", s: { rap: 10, dance: 10 } }] },
+                { q: "메인보컬 자리를 두고 팀원과 의견이 갈린다면?", options: [{ text: "자신 있게 실력을 증명한다", s: { vocal: 15 } }, { text: "팀의 조화를 위해 양보한다", s: { variety: 12, vocal: 5 } }] },
+                { q: "무대 위에서 실수했을 때 대처법은?", options: [{ text: "윙크와 함께 여유롭게 대처한다", s: { visual: 15 } }, { text: "실수마저 퍼포먼스처럼 승화시킨다", s: { variety: 15 } }] },
+                { q: "포지션 평가 랩 파트, 당신의 선택은?", options: [{ text: "나만의 색깔이 담긴 가사를 직접 쓴다", s: { rap: 15 } }, { text: "팀원의 랩 메이킹을 돕는다", s: { rap: 10, variety: 10 } }] },
+                { q: "방송 인터뷰에서 당신의 입덕 포인트는?", options: [{ text: "반전 매력이 돋보이는 솔직함", s: { variety: 15, visual: 5 } }, { text: "무대 위 압도적인 카리스마", s: { visual: 15, dance: 5 } }] },
+                { q: "연습 중 동선이 꼬인 팀원에게?", options: [{ text: "괜찮다고 다독이며 다시 맞춰본다", s: { variety: 15 } }, { text: "정확한 디테일을 짚어준다", s: { dance: 15 } }] },
+                { q: "현장 투표 순위가 낮게 나왔다면?", options: [{ text: "간절함을 담아 매력을 어필한다", s: { variety: 12, visual: 8 } }, { text: "다음 무대에서 반전을 보여주겠다 다짐한다", s: { dance: 10, vocal: 10 } }] },
+                { q: "컨셉 평가 의상이 너무 파격적이라면?", options: [{ text: "이 기회에 새로운 이미지를 구축한다", s: { visual: 15 } }, { text: "내 매력에 맞게 수정을 제안한다", s: { variety: 12 } }] },
+                { q: "연습 도중 체력이 한계에 다다랐을 때?", options: [{ text: "정신력으로 버티며 안무를 마무리한다", s: { dance: 15 } }, { text: "잠깐 쉬며 보컬 가사를 숙지한다", s: { vocal: 15 } }] },
+                { q: "엔딩 요정 5초! 당신의 포즈는?", options: [{ text: "윙크와 상큼한 미소", s: { visual: 20 } }, { text: "강렬한 카리스마 엔딩", s: { rap: 10, dance: 10 } }] },
+                { q: "국프들이 당신을 '노력파'라 부른다면?", options: [{ text: "실력을 더 키워 보답하려 한다", s: { dance: 10, vocal: 10 } }, { text: "그 자체로 감사해하며 더 열심히 한다", s: { variety: 15 } }] },
+                { q: "데뷔 조 발표식 전날 밤, 당신의 꿈은?", options: [{ text: "1위 트로피를 받는 꿈", s: { visual: 10, variety: 10 } }, { text: "동료들과 즐겁게 노는 꿈", s: { variety: 20 } }] },
+                { q: "라이벌 실력이 갑자기 상승했다면?", options: [{ text: "자극을 받아 한계를 뛰어넘는다", s: { dance: 15, vocal: 15 } }, { text: "나만의 색깔을 더 공고히 한다", s: { variety: 15 } }] },
+                { q: "마지막 방송 소감, 당신의 진심은?", options: [{ text: "국프님들에 대한 무한한 감사", s: { variety: 15 } }, { text: "앞으로의 포부와 각오", s: { visual: 10, dance: 10 } }] },
+                { q: "데뷔 후 첫 예능에 출연한다면?", options: [{ text: "온갖 개인기로 분량을 뽑는다", s: { variety: 20 } }, { text: "신비주의 비주얼을 뽐낸다", s: { visual: 20 } }] },
+                { q: "작곡가가 애드립을 요청한다면?", options: [{ text: "화려한 고음 애드립", s: { vocal: 20 } }, { text: "엣지 있는 랩 구절", s: { rap: 20 } }] },
+                { q: "파이널 무대 직전 마음가짐은?", options: [{ text: "노력을 믿고 즐기자", s: { variety: 15, visual: 5 } }, { text: "완벽하게 압도하자", s: { dance: 10, vocal: 10 } }] }
+            ];
+
+            const handleAnswer = (s) => {
+                const ns = { ...stats };
+                Object.keys(s).forEach(k => ns[k] += s[k]);
+                setStats(ns);
+                if (currentIdx < questions.length - 1) setCurrentIdx(currentIdx + 1);
+                else {
+                    setStep('loading');
+                    setTimeout(() => {
+                        const finalRank = Math.floor(Math.random()*11)+1;
+                        const reportData = getDynamicReport(ns);
+                        setResult({ rank: finalRank, stats: ns, ...reportData });
+                        setStep('result');
+                    }, 2000);
+                }
+            };
+
+            const getDynamicReport = (s) => {
+                const types = [
+                    { k: 'balance', t: "무대 위의 절대 강자, 육각형 센터", d: "모든 포지션을 완벽히 소화하는 완성형 아이돌" },
+                    { k: 'visual', t: "눈빛 하나로 서사를 쓰는 비주얼 장인", d: "등장만으로 공기를 바꾸는 압도적 아우라의 소유자" },
+                    { k: 'vocal', t: "입덕을 부르는 마성의 음색 요정", d: "노래 첫 소절로 모든 국프의 마음을 녹이는 보컬" },
+                    { k: 'variety', t: "팬심을 조련하는 천재 예능돌", d: "어떤 상황에서도 센스 있는 멘트로 분량을 뽑는 스타" },
+                    { k: 'performance', t: "독보적 스웨그의 퍼포먼스 장인", d: "무대 위에서 가장 빛나는 실력파 아티스트" }
+                ];
+
+                const fanCommentsPool = [
+                    ["진짜 얜 데뷔 안 하면 국프 파업임. 얼굴이 이미 서사임.", "실력 미쳤음... 저음이랑 고음 다 되는 거 실화냐?", "인간적으로 얘 없으면 데뷔조 밸런스 안 맞음. 무조건 원픽."],
+                    ["도입부 장인... 목소리 듣자마자 심장 녹아내림.", "춤선이 너무 깔끔함. 메인 댄서 자리는 이미 얘 거임.", "매력 포텐 터졌다 진짜. 예능 나오면 바로 떡상 각."],
+                    ["분량 좀 늘려주세요 ㅠㅠ 이렇게 잘하는데 왜 안 보여줌?", "센터 비주얼 미쳤다... 윙크할 때 심장 멎는 줄 알았네.", "간절함이 느껴져서 더 응원하게 됨. 꽃길만 걷자!"]
+                ];
+
+                // 최고 스탯 찾기
+                const maxVal = Math.max(s.dance, s.vocal, s.rap, s.visual, s.variety);
+                const minVal = Math.min(s.dance, s.vocal, s.rap, s.visual, s.variety);
+                
+                let selectedType;
+                // 육각형(밸런스) 체크: 최고점과 최저점 차이가 적으면 육각형
+                if (maxVal - minVal < 25) {
+                    selectedType = types[0];
+                } else if (s.visual === maxVal) {
+                    selectedType = types[1];
+                } else if (s.vocal === maxVal) {
+                    selectedType = types[2];
+                } else if (s.variety === maxVal) {
+                    selectedType = types[3];
+                } else {
+                    selectedType = types[4]; // 댄스나 랩이 높을 때
+                }
+
+                // 팬 코멘트 랜덤 선정 (풀에서 하나 골라 쓰기)
+                const comments = fanCommentsPool[Math.floor(Math.random() * fanCommentsPool.length)];
+
+                return { title: selectedType.t, desc: selectedType.d, comments };
+            };
+
+            const RadarChart = ({ stats }) => {
+                const s = 180, c = s/2, r = 60, labels = ['DANCE', 'VOCAL', 'RAP', 'VISUAL', 'VARIETY'], keys = ['dance', 'vocal', 'rap', 'visual', 'variety'], max = 120;
+                const pts = keys.map((k, i) => {
+                    const a = (Math.PI*2*i)/5 - Math.PI/2, v = Math.min((stats[k]||0)/max, 1)*r;
+                    return `${c+v*Math.cos(a)},${c+v*Math.sin(a)}`;
+                }).join(' ');
+                return (
+                    <div className="flex justify-center my-4 bg-slate-50 border border-slate-100 rounded-2xl py-6 relative">
+                        <svg width={s} height={s}>
+                            {[0.2,0.4,0.6,0.8,1].map(lvl => (
+                                <polygon key={lvl} points={labels.map((_,i)=>{
+                                    const a = (Math.PI*2*i)/5 - Math.PI/2;
+                                    return `${c+lvl*r*Math.cos(a)},${c+lvl*r*Math.sin(a)}`;
+                                }).join(' ')} className="fill-none stroke-slate-200" strokeWidth="1" />
+                            ))}
+                            <polygon points={pts} className="fill-pink-500/25 stroke-pink-500" strokeWidth="2" />
+                            {labels.map((l, i) => {
+                                const a = (Math.PI*2*i)/5 - Math.PI/2;
+                                return <text key={i} x={c+(r+22)*Math.cos(a)} y={c+(r+22)*Math.sin(a)} textAnchor="middle" className="text-[10px] font-black fill-slate-400 tracking-tighter">{l}</text>;
+                            })}
+                        </svg>
+                    </div>
+                );
+            };
+
+            const saveImage = async () => {
+                if (!resultRef.current) return;
+                try {
+                    const canvas = await html2canvas(resultRef.current, {
+                        scale: 2, 
+                        useCORS: true, 
+                        backgroundColor: '#ffffff',
+                        logging: false,
+                        scrollX: 0,
+                        scrollY: -window.scrollY
+                    });
+                    const dataUrl = canvas.toDataURL('image/png');
+                    const link = document.createElement('a');
+                    link.href = dataUrl;
+                    link.download = `Produce_Result_${name || 'Trainee'}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } catch (err) {
+                    alert("이미지 저장 중 오류가 발생했습니다.");
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="max-w-md w-full bg-white shadow-2xl border-[10px] border-slate-900 overflow-hidden flex flex-col h-[85vh] sm:h-[780px] relative rounded-3xl">
+                        
+                        <div className="bg-slate-900 text-white p-5 flex justify-between items-center z-10 shrink-0">
+                            <div className="flex items-center gap-2">
+                                <div className="bg-pink-500 w-5 h-5 flex items-center justify-center rounded-sm rotate-45">
+                                    <Icon name="star" size={12} className="-rotate-45 text-white fill-white" />
+                                </div>
+                                <span className="text-[11px] font-black italic tracking-widest uppercase">Produce Simulator</span>
+                            </div>
+                            <div className="bg-pink-500/10 px-2 py-0.5 rounded flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 bg-pink-500 rounded-full animate-pulse"></span>
+                                <span className="text-pink-500 font-black text-[9px] tracking-wider">LIVE</span>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto no-scrollbar relative bg-white">
+                            {step === 'home' && (
+                                <div className="p-8 space-y-8 h-full flex flex-col justify-center fade-in">
+                                    <div className="text-center">
+                                        <div className="w-20 h-20 border-[5px] border-pink-500 rotate-45 flex items-center justify-center mx-auto mb-8 bg-slate-900 shadow-2xl">
+                                            <Icon name="star" size={40} className="-rotate-45 text-pink-500 fill-pink-500" />
+                                        </div>
+                                        <h1 className="text-5xl font-black italic text-slate-900 leading-none tracking-tighter">PRODUCE<br/><span className="text-pink-500">PROJECT</span></h1>
+                                        <p className="text-[10px] font-black text-slate-400 mt-4 tracking-[0.3em] uppercase">Global Trainee Assessment System</p>
+                                    </div>
+                                    <div className="space-y-4">
+                                        <input type="text" placeholder="연습생 이름을 입력하세요" className="w-full p-4 bg-slate-50 border-2 border-slate-100 text-center font-black rounded-xl focus:border-slate-900 outline-none" value={name} onChange={e => setName(e.target.value)} />
+                                        <div onClick={() => fileInputRef.current.click()} className="w-full h-44 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center cursor-pointer bg-slate-50 relative overflow-hidden group hover:border-pink-300 transition-all">
+                                            {image ? <img src={image} className="trainee-photo" /> : <div className="flex flex-col items-center"><Icon name="plus-circle" size={32} className="text-slate-300 mb-2" /><span className="text-[11px] font-black text-slate-400">사진 업로드</span></div>}
+                                        </div>
+                                        <input type="file" ref={fileInputRef} onChange={handleImageResize} className="hidden" accept="image/*" />
+                                        <button onClick={() => { if(name) setStep('test'); else alert('이름을 입력해주세요!'); }} className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl shadow-[0_10px_20px_rgba(236,72,153,0.3)] uppercase italic flex items-center justify-center gap-3 active:scale-[0.98] transition-all">Evaluation Start <Icon name="chevron-right" size={20} /></button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {step === 'test' && (
+                                <div className="p-8 space-y-6 fade-in">
+                                    <div className="flex justify-between font-black text-[10px] text-slate-400 uppercase tracking-widest"><span>Assessment Phase</span><span>{currentIdx+1} / 20</span></div>
+                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-pink-500 transition-all duration-500" style={{width:`${(currentIdx+1)*5}%`}}></div>
+                                    </div>
+                                    <div className="bg-slate-900 p-6 rounded-2xl text-white font-bold italic text-xl leading-tight relative shadow-xl">
+                                        <div className="absolute -top-2 left-6 w-5 h-5 bg-pink-500 rotate-45"></div>
+                                        Q. {questions[currentIdx].q}
+                                    </div>
+                                    <div className="space-y-3">
+                                        {questions[currentIdx].options.map((o, i) => (
+                                            <button key={i} onClick={() => handleAnswer(o.s)} className="w-full p-5 border-2 border-slate-100 text-left font-bold rounded-2xl hover:border-slate-900 hover:bg-slate-50 transition-all flex justify-between items-center group">
+                                                <span className="text-slate-600 group-hover:text-slate-900 pr-4 leading-snug">{o.text}</span>
+                                                <div className="w-6 h-6 rounded-full border-2 border-slate-100 group-hover:border-pink-500 flex items-center justify-center shrink-0">
+                                                    <div className="w-2 h-2 bg-pink-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {step === 'loading' && (
+                                <div className="h-full flex flex-col items-center justify-center bg-slate-900 text-center p-10">
+                                    <div className="relative">
+                                        <div className="w-24 h-24 border-[10px] border-white/5 border-t-pink-500 rounded-full animate-spin"></div>
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <Icon name="star" size={24} className="text-pink-500 animate-pulse" />
+                                        </div>
+                                    </div>
+                                    <p className="text-4xl font-black italic text-white mt-10 tracking-tighter">RANKING...</p>
+                                    <p className="text-pink-500 text-[10px] font-black tracking-[0.4em] mt-4 uppercase animate-pulse">Calculating Final Score</p>
+                                </div>
+                            )}
+
+                            {step === 'result' && result && (
+                                <div className="fade-in pb-12">
+                                    <div ref={resultRef} className="p-8 bg-white w-full space-y-6">
+                                        <div className="bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border-2 border-slate-800">
+                                            <div className="flex gap-6 items-center p-6">
+                                                <div className="w-28 h-36 bg-slate-800 rounded-xl border-2 border-pink-500 relative shrink-0 overflow-hidden shadow-inner">
+                                                    {image ? <img src={image} className="trainee-photo" /> : <div className="w-full h-full flex items-center justify-center bg-slate-700 text-slate-500"><Icon name="user" size={40} /></div>}
+                                                    <div className="absolute bottom-0 w-full bg-pink-500 text-[9px] text-center font-black text-white py-1 uppercase tracking-widest">Official Debut</div>
+                                                </div>
+                                                <div className="text-white min-w-0">
+                                                    <div className="flex items-center gap-1.5 mb-2">
+                                                        <Icon name="shield-check" size={14} className="text-pink-500 fill-pink-500/20" />
+                                                        <span className="text-[10px] font-black tracking-[0.2em] text-pink-500 uppercase">Confirmed</span>
+                                                    </div>
+                                                    <h3 className="text-3xl font-black italic truncate leading-none mb-3">{name}</h3>
+                                                    <div className="flex items-baseline gap-1.5">
+                                                        <span className="text-6xl font-black italic leading-none tracking-tighter">{result.rank}</span>
+                                                        <span className="text-2xl font-black text-pink-500 italic">위</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <RadarChart stats={result.stats} />
+                                        
+                                        <div className="bg-slate-900 text-white p-7 rounded-3xl relative overflow-hidden shadow-xl">
+                                            <div className="absolute top-0 right-0 p-4 opacity-10"><Icon name="quote" size={60} /></div>
+                                            <h4 className="text-[10px] font-black text-pink-500 mb-3 uppercase tracking-[0.3em]">Evaluation Report</h4>
+                                            <p className="text-2xl font-black italic leading-tight">"{result.title}"</p>
+                                            <p className="text-[11px] text-slate-400 font-bold mt-3 leading-relaxed break-keep">{result.desc}</p>
+                                        </div>
+                                        
+                                        <div className="space-y-4 pb-2">
+                                            <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2"><Icon name="heart" size={14} className="text-pink-500 fill-pink-500" /> Producer Comments</h4>
+                                            {result.comments.map((c, i) => (
+                                                <div key={i} className="bg-slate-50 p-5 rounded-2xl border border-slate-100 flex gap-4 items-center shadow-sm">
+                                                    <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shrink-0 border border-slate-200 shadow-sm text-pink-500"><Icon name="user" size={18} /></div>
+                                                    <p className="text-[13px] font-bold text-slate-700 italic">"{c}"</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="px-8 grid grid-cols-2 gap-4 mt-4">
+                                        <button onClick={() => location.reload()} className="p-5 border-2 border-slate-900 rounded-2xl font-black italic text-sm hover:bg-slate-50 active:scale-[0.98] transition-all uppercase">Retry</button>
+                                        <button onClick={saveImage} className="p-5 bg-pink-500 text-white font-black rounded-2xl shadow-[0_10px_20px_rgba(236,72,153,0.3)] italic text-sm flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all uppercase">Save Image</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
